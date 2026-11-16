@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="pt"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>USLORDS | Ocean World — experiência WebGL</title>
-<style>html,body{margin:0;overflow:hidden;background:#031622;color:#e2faff;font:14px system-ui}canvas{display:block;width:100vw;height:100dvh}#ui{position:fixed;top:18px;left:18px;background:#031722b8;padding:14px;border:1px solid #66d9ee55;border-radius:12px;max-width:310px}h2{margin:0 0 7px;letter-spacing:2px}small{opacity:.8}button{border:1px solid #7de9ef;background:#063d50;color:white;padding:9px;border-radius:8px;cursor:pointer}#pad{position:fixed;bottom:18px;left:18px;display:grid;grid-template-columns:repeat(3,45px);gap:4px}#pad button{height:44px;touch-action:none}#pad button:first-child{grid-column:2}#pad button:nth-child(2){grid-column:1}#pad button:nth-child(3){grid-column:2}#pad button:nth-child(4){grid-column:3}#pad button:nth-child(5){grid-column:2}@media(pointer:fine){#pad{opacity:.45}}</style>
+<style>html,body{margin:0;overflow:hidden;background:#031622;color:#e2faff;font:14px system-ui}canvas{display:block;width:100vw;height:100dvh;touch-action:none}#ui{position:fixed;top:18px;left:18px;background:#031722b8;padding:14px;border:1px solid #66d9ee55;border-radius:12px;max-width:310px}h2{margin:0 0 7px;letter-spacing:2px}small{opacity:.8}button{border:1px solid #7de9ef;background:#063d50;color:white;padding:9px;border-radius:8px;cursor:pointer}#pad{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));left:18px;display:grid;grid-template-columns:repeat(3,45px);gap:4px;user-select:none}#pad button{height:44px;touch-action:none}#pad button:first-child{grid-column:2}#pad button:nth-child(2){grid-column:1}#pad button:nth-child(3){grid-column:2}#pad button:nth-child(4){grid-column:3}#pad button:nth-child(5){grid-column:2}@media(pointer:fine){#pad{opacity:.45}}@media(pointer:coarse){#ui{top:8px;left:8px;max-width:220px;padding:9px;font-size:12px}#ui h2{font-size:15px}#pad button{height:54px;min-width:54px}#pad{grid-template-columns:repeat(3,54px)}#pad button{background:#064b60bb}#dive{display:flex!important}}#dive{display:none;position:fixed;right:16px;bottom:calc(22px + env(safe-area-inset-bottom));gap:10px}#dive button{width:64px;height:64px;border-radius:50%;touch-action:none;background:#064b60bb}</style>
 <canvas id="sea"></canvas><div id="ui"><h2>USLORDS // ABYSS</h2><small>Protótipo experimental — mundo submarino gerado por código.<br>WASD mover · rato/arrastar olhar · espaço subir · Shift descer · setas rodar</small><p><button id="sound">Ativar som do oceano</button> <button id="reset">Reiniciar</button></p><small id="status"></small></div>
 <div id="pad"><button data-k="w">▲</button><button data-k="a">◀</button><button data-k="s">▼</button><button data-k="d">▶</button><button data-k=" ">↑</button></div>
-<script>
+<div id="dive"><button data-k=" ">SUBIR</button><button data-k="shift">DESCER</button></div><script>
 const canvas=document.querySelector('#sea'),gl=canvas.getContext('webgl',{antialias:false,alpha:false});
 if(!gl){document.querySelector('#status').textContent='WebGL indisponível neste navegador';throw Error('WebGL indisponível')}
 const vs='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
@@ -44,7 +44,7 @@ void main(){
  float glow=max(0.,rd.y)*.35;
  vec3 col=mix(vec3(.004,.055,.095),vec3(.035,.34,.43),clamp(rd.y*.7+.55,0.,1.))+vec3(.02,.15,.17)*glow;
  float t=0.;bool hit=false;vec3 pos=ro;
- for(int i=0;i<92;i++){pos=ro+rd*t;float d=scene(pos);if(d<.055){hit=true;break;}t+=max(.08,d*.65);if(t>95.)break;}
+ for(int i=0;i<68;i++){pos=ro+rd*t;float d=scene(pos);if(d<.055){hit=true;break;}t+=max(.08,d*.65);if(t>72.)break;}
  if(hit){vec3 n=normalAt(pos);float light=max(dot(n,normalize(vec3(.45,.9,.2))),0.);
  float sand=noise(pos.xz*.55);vec3 base=mix(vec3(.035,.18,.19),vec3(.16,.38,.34),sand);
  float coral=noise(pos.xz*2.5);if(coral>.73 && pos.y<ground(pos.xz)+.5)base=mix(base,vec3(.65,.27,.42),.55);
@@ -64,7 +64,7 @@ const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,vs));
 const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);const a=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
 const uniforms={resolution:gl.getUniformLocation(prog,'resolution'),time:gl.getUniformLocation(prog,'time'),eye:gl.getUniformLocation(prog,'eye'),look:gl.getUniformLocation(prog,'look')};
 let eye=[0,0,-8],yaw=0,pitch=-.14,keys={},last=performance.now(),drag=null;
-function resize(){let scale=Math.min(devicePixelRatio||1,1.2);canvas.width=Math.round(innerWidth*scale);canvas.height=Math.round(innerHeight*scale);gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();
+function resize(){let scale=Math.min(devicePixelRatio||1,matchMedia('(pointer:coarse)').matches?.72:1.2);canvas.width=Math.round(innerWidth*scale);canvas.height=Math.round(innerHeight*scale);gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();
 addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase()))e.preventDefault()});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
 canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.004;pitch=Math.max(-1.35,Math.min(1.35,pitch-(e.clientY-drag[1])*.004));drag=[e.clientX,e.clientY]});canvas.addEventListener('pointerup',()=>drag=null);
 document.querySelectorAll('[data-k]').forEach(el=>{let k=el.dataset.k;el.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true;el.setPointerCapture(e.pointerId)});for(let event of ['pointerup','pointercancel'])el.addEventListener(event,()=>keys[k]=false)});
