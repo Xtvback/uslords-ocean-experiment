@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>USLORDS | Ocean World — experiência WebGL</title>
+<style>html,body{margin:0;overflow:hidden;background:#031622;color:#e2faff;font:14px system-ui}canvas{display:block;width:100vw;height:100dvh}#ui{position:fixed;top:18px;left:18px;background:#031722b8;padding:14px;border:1px solid #66d9ee55;border-radius:12px;max-width:310px}h2{margin:0 0 7px;letter-spacing:2px}small{opacity:.8}button{border:1px solid #7de9ef;background:#063d50;color:white;padding:9px;border-radius:8px;cursor:pointer}#pad{position:fixed;bottom:18px;left:18px;display:grid;grid-template-columns:repeat(3,45px);gap:4px}#pad button{height:44px;touch-action:none}#pad button:first-child{grid-column:2}#pad button:nth-child(2){grid-column:1}#pad button:nth-child(3){grid-column:2}#pad button:nth-child(4){grid-column:3}#pad button:nth-child(5){grid-column:2}@media(pointer:fine){#pad{opacity:.45}}</style>
+<canvas id="sea"></canvas><div id="ui"><h2>USLORDS // ABYSS</h2><small>Protótipo experimental — mundo submarino gerado por código.<br>WASD mover · rato/arrastar olhar · espaço subir · Shift descer · setas rodar</small><p><button id="sound">Ativar som do oceano</button> <button id="reset">Reiniciar</button></p><small id="status"></small></div>
+<div id="pad"><button data-k="w">▲</button><button data-k="a">◀</button><button data-k="s">▼</button><button data-k="d">▶</button><button data-k=" ">↑</button></div>
+<script>
+const canvas=document.querySelector('#sea'),gl=canvas.getContext('webgl',{antialias:false,alpha:false});
+if(!gl){document.querySelector('#status').textContent='WebGL indisponível neste navegador';throw Error('WebGL indisponível')}
+const vs='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+const fs=`
+precision highp float;
+uniform vec2 resolution;uniform float time;uniform vec3 eye;uniform vec2 look;
+#define PI 3.14159265
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+float ground(vec2 p){return -5.5+2.2*noise(p*.075)+.8*sin(p.x*.13)*cos(p.y*.15);}
+float scene(vec3 p){
+ float floorD=p.y-ground(p.xz);
+ vec2 cell=floor(p.xz/13.);
+ vec2 center=(cell+.5)*13.+(vec2(hash(cell),hash(cell+4.7))-.5)*6.;
+ float rock=length((p-vec3(center.x,ground(center)+2.,center.y))/vec3(3.2,4.8,3.2))-1.;
+ rock+=.16*noise(p.xz*.7)+.10*sin(p.y*2.+p.x);
+ return min(floorD,rock*2.5);
+}
+vec3 normalAt(vec3 p){float e=.08;return normalize(vec3(scene(p+vec3(e,0,0))-scene(p-vec3(e,0,0)),scene(p+vec3(0,e,0))-scene(p-vec3(0,e,0)),scene(p+vec3(0,0,e))-scene(p-vec3(0,0,e))));}
+vec3 fish(vec3 ro,vec3 rd,vec3 col){
+ for(int i=0;i<18;i++){
+ float fi=float(i);vec3 c=vec3(sin(fi*7.1)*17.,-1.8+sin(fi*2.4)*2.,cos(fi*4.9)*18.);
+ c.x+=sin(time*(.4+hash(vec2(fi,1.))*.5)+fi)*5.;
+ c.z+=cos(time*.35+fi)*4.;
+ vec3 q=c-ro;float t=dot(q,rd);
+ if(t>0. && t<65.){float d=length(q-rd*t);float size=.18+.22*hash(vec2(fi,3.));if(d<size){float shimmer=.65+.35*sin(time*6.+fi);col=mix(col,vec3(.25,.83,.9)*shimmer, .7*(1.-d/size));}}
+ }
+ return col;
+}
+void main(){
+ vec2 uv=(gl_FragCoord.xy-.5*resolution)/resolution.y;
+ vec3 ro=eye;float yaw=look.x,pitch=look.y;
+ vec3 forward=normalize(vec3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch)));
+ vec3 right=normalize(vec3(cos(yaw),0.,-sin(yaw)));
+ vec3 up=normalize(cross(forward,right));
+ vec3 rd=normalize(forward*1.45+right*uv.x+up*uv.y);
+ float glow=max(0.,rd.y)*.35;
+ vec3 col=mix(vec3(.004,.055,.095),vec3(.035,.34,.43),clamp(rd.y*.7+.55,0.,1.))+vec3(.02,.15,.17)*glow;
+ float t=0.;bool hit=false;vec3 pos=ro;
+ for(int i=0;i<92;i++){pos=ro+rd*t;float d=scene(pos);if(d<.055){hit=true;break;}t+=max(.08,d*.65);if(t>95.)break;}
+ if(hit){vec3 n=normalAt(pos);float light=max(dot(n,normalize(vec3(.45,.9,.2))),0.);
+ float sand=noise(pos.xz*.55);vec3 base=mix(vec3(.035,.18,.19),vec3(.16,.38,.34),sand);
+ float coral=noise(pos.xz*2.5);if(coral>.73 && pos.y<ground(pos.xz)+.5)base=mix(base,vec3(.65,.27,.42),.55);
+ float caustic=pow(max(0.,sin(pos.x*.9+time*.8)*sin(pos.z*1.1-time*.6)),6.);
+ col=base*(.34+.75*light)+vec3(.12,.45,.46)*caustic*.4;
+ col=mix(col,vec3(.006,.14,.20),1.-exp(-t*.043));
+ }
+ col=fish(ro,rd,col);
+ float rays=pow(max(0.,dot(rd,normalize(vec3(.15,.95,.25)))),14.);
+ col+=vec3(.08,.31,.34)*rays;
+ float particulate=hash(floor(gl_FragCoord.xy/3.)+floor(time*2.));col+=vec3(.06,.13,.14)*step(.996,particulate);
+ col=pow(max(col,0.),vec3(.87));
+ gl_FragColor=vec4(col,1.);
+}`;
+function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
+const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,vs));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
+const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),gl.STATIC_DRAW);const a=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+const uniforms={resolution:gl.getUniformLocation(prog,'resolution'),time:gl.getUniformLocation(prog,'time'),eye:gl.getUniformLocation(prog,'eye'),look:gl.getUniformLocation(prog,'look')};
+let eye=[0,0,-8],yaw=0,pitch=-.14,keys={},last=performance.now(),drag=null;
+function resize(){let scale=Math.min(devicePixelRatio||1,1.2);canvas.width=Math.round(innerWidth*scale);canvas.height=Math.round(innerHeight*scale);gl.viewport(0,0,canvas.width,canvas.height)}addEventListener('resize',resize);resize();
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(e.key.toLowerCase()))e.preventDefault()});addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+canvas.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];canvas.setPointerCapture(e.pointerId)});canvas.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-drag[0])*.004;pitch=Math.max(-1.35,Math.min(1.35,pitch-(e.clientY-drag[1])*.004));drag=[e.clientX,e.clientY]});canvas.addEventListener('pointerup',()=>drag=null);
+document.querySelectorAll('[data-k]').forEach(el=>{let k=el.dataset.k;el.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true;el.setPointerCapture(e.pointerId)});for(let event of ['pointerup','pointercancel'])el.addEventListener(event,()=>keys[k]=false)});
+document.querySelector('#reset').onclick=()=>{eye=[0,0,-8];yaw=0;pitch=-.14};
+let audio;document.querySelector('#sound').onclick=()=>{if(audio){audio.close();audio=null;document.querySelector('#sound').textContent='Ativar som do oceano';return}const C=window.AudioContext||window.webkitAudioContext;if(!C)return;audio=new C();let length=audio.sampleRate*2,buf=audio.createBuffer(1,length,audio.sampleRate),data=buf.getChannelData(0);let x=0;for(let i=0;i<length;i++){x=(x+Math.random()*2-1)*.985;data[i]=x*.18}let source=audio.createBufferSource();source.buffer=buf;source.loop=true;let filter=audio.createBiquadFilter();filter.type='lowpass';filter.frequency.value=260;source.connect(filter);filter.connect(audio.destination);source.start();document.querySelector('#sound').textContent='Desligar som'};
+function frame(now){let dt=Math.min((now-last)/1000,.05);last=now;let speed=5*dt;if(keys.w||keys.arrowup){eye[0]+=Math.sin(yaw)*speed;eye[2]+=Math.cos(yaw)*speed}if(keys.s||keys.arrowdown){eye[0]-=Math.sin(yaw)*speed;eye[2]-=Math.cos(yaw)*speed}if(keys.a){eye[0]-=Math.cos(yaw)*speed;eye[2]+=Math.sin(yaw)*speed}if(keys.d){eye[0]+=Math.cos(yaw)*speed;eye[2]-=Math.sin(yaw)*speed}if(keys[' '])eye[1]+=speed;if(keys.shift)eye[1]-=speed;if(keys.arrowleft)yaw-=dt;if(keys.arrowright)yaw+=dt;eye[1]=Math.max(-4.3,Math.min(8,eye[1]));gl.uniform2f(uniforms.resolution,canvas.width,canvas.height);gl.uniform1f(uniforms.time,now*.001);gl.uniform3f(uniforms.eye,...eye);gl.uniform2f(uniforms.look,yaw,pitch);gl.drawArrays(gl.TRIANGLES,0,6);requestAnimationFrame(frame)}requestAnimationFrame(frame);
+</script></html>
